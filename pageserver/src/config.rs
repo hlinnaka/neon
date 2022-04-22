@@ -480,6 +480,19 @@ impl PageServerConf {
         if let Some(pitr_interval) = item.get("pitr_interval") {
             t_conf.pitr_interval = Some(parse_toml_duration("pitr_interval", pitr_interval)?);
         }
+        if let Some(walreceiver_connect_timeout) = item.get("walreceiver_connect_timeout") {
+            t_conf.walreceiver_connect_timeout = Some(parse_toml_duration(
+                "walreceiver_connect_timeout",
+                walreceiver_connect_timeout,
+            )?);
+        }
+        if let Some(max_walreceiver_connect_attempts) = item.get("max_walreceiver_connect_attempts")
+        {
+            t_conf.max_walreceiver_connect_attempts = Some(parse_toml_from_str(
+                "max_walreceiver_connect_attempts",
+                max_walreceiver_connect_attempts,
+            )?);
+        }
 
         Ok(t_conf)
     }

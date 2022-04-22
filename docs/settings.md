@@ -111,6 +111,14 @@ L0 delta layer threshold for L1 iamge layer creation. Default is 3.
 
 WAL retention duration for PITR branching. Default is 30 days.
 
+#### walreceiver_connect_timeout
+
+Time to wait to establish the wal receiver connection before failing
+
+#### max_walreceiver_connect_attempts
+
+Max times to try to connect to the wal receiver before failing
+
 #### initial_superuser_name
 
 Name of the initial superuser role, passed to initdb when a new tenant

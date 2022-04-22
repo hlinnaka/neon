@@ -378,6 +378,15 @@ async fn tenant_create_handler(mut request: Request<Body>) -> Result<Response<Bo
             Some(humantime::parse_duration(&pitr_interval).map_err(ApiError::from_err)?);
     }
 
+    if let Some(walreceiver_connect_timeout) = request_data.walreceiver_connect_timeout {
+        tenant_conf.walreceiver_connect_timeout = Some(
+            humantime::parse_duration(&walreceiver_connect_timeout).map_err(ApiError::from_err)?,
+        );
+    }
+    if let Some(max_walreceiver_connect_attempts) = request_data.max_walreceiver_connect_attempts {
+        tenant_conf.max_walreceiver_connect_attempts = Some(max_walreceiver_connect_attempts);
+    }
+
     tenant_conf.checkpoint_distance = request_data.checkpoint_distance;
     tenant_conf.compaction_target_size = request_data.compaction_target_size;
     tenant_conf.compaction_threshold = request_data.compaction_threshold;
@@ -424,6 +433,14 @@ async fn tenant_config_handler(mut request: Request<Body>) -> Result<Response<Bo
     if let Some(pitr_interval) = request_data.pitr_interval {
         tenant_conf.pitr_interval =
             Some(humantime::parse_duration(&pitr_interval).map_err(ApiError::from_err)?);
+    }
+    if let Some(walreceiver_connect_timeout) = request_data.walreceiver_connect_timeout {
+        tenant_conf.walreceiver_connect_timeout = Some(
+            humantime::parse_duration(&walreceiver_connect_timeout).map_err(ApiError::from_err)?,
+        );
+    }
+    if let Some(max_walreceiver_connect_attempts) = request_data.max_walreceiver_connect_attempts {
+        tenant_conf.max_walreceiver_connect_attempts = Some(max_walreceiver_connect_attempts);
     }
 
     tenant_conf.checkpoint_distance = request_data.checkpoint_distance;

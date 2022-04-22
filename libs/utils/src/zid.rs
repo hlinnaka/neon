@@ -193,7 +193,7 @@ pub struct ZTenantId(ZId);
 zid_newtype!(ZTenantId);
 
 // A pair uniquely identifying Zenith instance.
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ZTenantTimelineId {
     pub tenant_id: ZTenantId,
     pub timeline_id: ZTimelineId,
@@ -224,7 +224,7 @@ impl fmt::Display for ZTenantTimelineId {
 
 // Unique ID of a storage node (safekeeper or pageserver). Supposed to be issued
 // by the console.
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Debug, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ZNodeId(pub u64);
 

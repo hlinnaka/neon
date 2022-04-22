@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use utils::{
@@ -33,6 +35,8 @@ pub struct TenantCreateRequest {
     pub gc_period: Option<String>,
     pub image_creation_threshold: Option<usize>,
     pub pitr_interval: Option<String>,
+    pub walreceiver_connect_timeout: Option<String>,
+    pub max_walreceiver_connect_attempts: Option<NonZeroU32>,
 }
 
 #[serde_as]
@@ -68,6 +72,8 @@ pub struct TenantConfigRequest {
     pub gc_period: Option<String>,
     pub image_creation_threshold: Option<usize>,
     pub pitr_interval: Option<String>,
+    pub walreceiver_connect_timeout: Option<String>,
+    pub max_walreceiver_connect_attempts: Option<NonZeroU32>,
 }
 
 impl TenantConfigRequest {
@@ -82,6 +88,8 @@ impl TenantConfigRequest {
             gc_period: None,
             image_creation_threshold: None,
             pitr_interval: None,
+            walreceiver_connect_timeout: None,
+            max_walreceiver_connect_attempts: None,
         }
     }
 }

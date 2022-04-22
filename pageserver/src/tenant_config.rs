@@ -10,6 +10,7 @@
 //!
 use crate::config::PageServerConf;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::time::Duration;
 use utils::zid::ZTenantId;
@@ -34,6 +35,8 @@ pub mod defaults {
     pub const DEFAULT_GC_PERIOD: &str = "100 s";
     pub const DEFAULT_IMAGE_CREATION_THRESHOLD: usize = 3;
     pub const DEFAULT_PITR_INTERVAL: &str = "30 days";
+    pub const DEFAULT_WALRECEIVER_CONNECT_TIMEOUT: &str = "2 seconds";
+    pub const DEFAULT_MAX_WALRECEIVER_CONNECT_ATTEMPTS: u32 = 10;
 }
 
 /// Per-tenant configuration options
@@ -68,6 +71,11 @@ pub struct TenantConf {
     // Page versions older than this are garbage collected away.
     #[serde(with = "humantime_serde")]
     pub pitr_interval: Duration,
+    /// Maximum amount of time to wait while opening a connection to receive wal, before erroring.
+    #[serde(with = "humantime_serde")]
+    pub walreceiver_connect_timeout: Duration,
+    /// Maximum times to try opening the wal receiver connection.
+    pub max_walreceiver_connect_attempts: NonZeroU32,
 }
 
 /// Same as TenantConf, but this struct preserves the information about
@@ -85,6 +93,9 @@ pub struct TenantConfOpt {
     pub image_creation_threshold: Option<usize>,
     #[serde(with = "humantime_serde")]
     pub pitr_interval: Option<Duration>,
+    #[serde(with = "humantime_serde")]
+    pub walreceiver_connect_timeout: Option<Duration>,
+    pub max_walreceiver_connect_attempts: Option<NonZeroU32>,
 }
 
 impl TenantConfOpt {
@@ -108,6 +119,12 @@ impl TenantConfOpt {
                 .image_creation_threshold
                 .unwrap_or(global_conf.image_creation_threshold),
             pitr_interval: self.pitr_interval.unwrap_or(global_conf.pitr_interval),
+            walreceiver_connect_timeout: self
+                .walreceiver_connect_timeout
+                .unwrap_or(global_conf.walreceiver_connect_timeout),
+            max_walreceiver_connect_attempts: self
+                .max_walreceiver_connect_attempts
+                .unwrap_or(global_conf.max_walreceiver_connect_attempts),
         }
     }
 
@@ -136,6 +153,12 @@ impl TenantConfOpt {
         if let Some(pitr_interval) = other.pitr_interval {
             self.pitr_interval = Some(pitr_interval);
         }
+        if let Some(walreceiver_connect_timeout) = other.walreceiver_connect_timeout {
+            self.walreceiver_connect_timeout = Some(walreceiver_connect_timeout);
+        }
+        if let Some(max_walreceiver_connect_attempts) = other.max_walreceiver_connect_attempts {
+            self.max_walreceiver_connect_attempts = Some(max_walreceiver_connect_attempts);
+        }
     }
 }
 
@@ -155,6 +178,14 @@ impl TenantConf {
             image_creation_threshold: DEFAULT_IMAGE_CREATION_THRESHOLD,
             pitr_interval: humantime::parse_duration(DEFAULT_PITR_INTERVAL)
                 .expect("cannot parse default PITR interval"),
+            walreceiver_connect_timeout: humantime::parse_duration(
+                DEFAULT_WALRECEIVER_CONNECT_TIMEOUT,
+            )
+            .expect("cannot parse default walreceiver connect timeout"),
+            max_walreceiver_connect_attempts: NonZeroU32::new(
+                DEFAULT_MAX_WALRECEIVER_CONNECT_ATTEMPTS,
+            )
+            .expect("cannot parse default max walreceiver connect attempts"),
         }
     }
 
@@ -166,6 +197,8 @@ impl TenantConf {
 
     #[cfg(test)]
     pub fn dummy_conf() -> Self {
+        use self::defaults::DEFAULT_MAX_WALRECEIVER_CONNECT_ATTEMPTS;
+
         TenantConf {
             checkpoint_distance: defaults::DEFAULT_CHECKPOINT_DISTANCE,
             compaction_target_size: 4 * 1024 * 1024,
@@ -175,6 +208,14 @@ impl TenantConf {
             gc_period: Duration::from_secs(10),
             image_creation_threshold: defaults::DEFAULT_IMAGE_CREATION_THRESHOLD,
             pitr_interval: Duration::from_secs(60 * 60),
+            walreceiver_connect_timeout: humantime::parse_duration(
+                defaults::DEFAULT_WALRECEIVER_CONNECT_TIMEOUT,
+            )
+            .unwrap(),
+            max_walreceiver_connect_attempts: NonZeroU32::new(
+                DEFAULT_MAX_WALRECEIVER_CONNECT_ATTEMPTS,
+            )
+            .unwrap(),
         }
     }
 }

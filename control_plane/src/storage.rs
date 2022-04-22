@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::TcpStream;
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -11,6 +12,7 @@ use nix::errno::Errno;
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use pageserver::http::models::{TenantConfigRequest, TenantCreateRequest, TimelineCreateRequest};
+use pageserver::tenant_mgr::TenantInfo;
 use pageserver::timelines::TimelineInfo;
 use postgres::{Config, NoTls};
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -26,7 +28,6 @@ use utils::{
 
 use crate::local_env::LocalEnv;
 use crate::{fill_rust_env_vars, read_pidfile};
-use pageserver::tenant_mgr::TenantInfo;
 
 #[derive(Error, Debug)]
 pub enum PageserverHttpError {
@@ -35,6 +36,12 @@ pub enum PageserverHttpError {
 
     #[error("Error: {0}")]
     Response(String),
+}
+
+impl From<anyhow::Error> for PageserverHttpError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Response(e.to_string())
+    }
 }
 
 type Result<T> = result::Result<T, PageserverHttpError>;
@@ -398,6 +405,13 @@ impl PageServerNode {
                     .map(|x| x.parse::<usize>())
                     .transpose()?,
                 pitr_interval: settings.get("pitr_interval").map(|x| x.to_string()),
+                walreceiver_connect_timeout: settings
+                    .get("walreceiver_connect_timeout")
+                    .map(|x| x.to_string()),
+                max_walreceiver_connect_attempts: settings
+                    .get("max_walreceiver_connect_attempts")
+                    .map(|x| x.parse::<NonZeroU32>())
+                    .transpose()?,
             })
             .send()?
             .error_from_body()?
@@ -421,22 +435,42 @@ impl PageServerNode {
                 tenant_id,
                 checkpoint_distance: settings
                     .get("checkpoint_distance")
-                    .map(|x| x.parse::<u64>().unwrap()),
+                    .map(|x| x.parse::<u64>())
+                    .transpose()
+                    .context("Failed to parse 'checkpoint_distance' as an integer")?,
                 compaction_target_size: settings
                     .get("compaction_target_size")
-                    .map(|x| x.parse::<u64>().unwrap()),
+                    .map(|x| x.parse::<u64>())
+                    .transpose()
+                    .context("Failed to parse 'compaction_target_size' as an integer")?,
                 compaction_period: settings.get("compaction_period").map(|x| x.to_string()),
                 compaction_threshold: settings
                     .get("compaction_threshold")
-                    .map(|x| x.parse::<usize>().unwrap()),
+                    .map(|x| x.parse::<usize>())
+                    .transpose()
+                    .context("Failed to parse 'compaction_threshold' as an integer")?,
                 gc_horizon: settings
                     .get("gc_horizon")
-                    .map(|x| x.parse::<u64>().unwrap()),
+                    .map(|x| x.parse::<u64>())
+                    .transpose()
+                    .context("Failed to parse 'gc_horizon' as an integer")?,
                 gc_period: settings.get("gc_period").map(|x| x.to_string()),
                 image_creation_threshold: settings
                     .get("image_creation_threshold")
-                    .map(|x| x.parse::<usize>().unwrap()),
+                    .map(|x| x.parse::<usize>())
+                    .transpose()
+                    .context("Failed to parse 'image_creation_threshold' as non zero integer")?,
                 pitr_interval: settings.get("pitr_interval").map(|x| x.to_string()),
+                walreceiver_connect_timeout: settings
+                    .get("walreceiver_connect_timeout")
+                    .map(|x| x.to_string()),
+                max_walreceiver_connect_attempts: settings
+                    .get("max_walreceiver_connect_attempts")
+                    .map(|x| x.parse::<NonZeroU32>())
+                    .transpose()
+                    .context(
+                        "Failed to parse 'max_walreceiver_connect_attempts' as non zero integer",
+                    )?,
             })
             .send()?
             .error_from_body()?;

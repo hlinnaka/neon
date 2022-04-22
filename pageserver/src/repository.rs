@@ -469,6 +469,10 @@ pub mod repo_harness {
                 gc_period: Some(tenant_conf.gc_period),
                 image_creation_threshold: Some(tenant_conf.image_creation_threshold),
                 pitr_interval: Some(tenant_conf.pitr_interval),
+                walreceiver_connect_timeout: Some(tenant_conf.walreceiver_connect_timeout),
+                max_walreceiver_connect_attempts: Some(
+                    tenant_conf.max_walreceiver_connect_attempts,
+                ),
             }
         }
     }
