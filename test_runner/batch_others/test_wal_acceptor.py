@@ -557,8 +557,6 @@ def test_sync_safekeepers(zenith_env_builder: ZenithEnvBuilder,
 
 
 def test_timeline_status(zenith_env_builder: ZenithEnvBuilder):
-
-    zenith_env_builder.num_safekeepers = 1
     env = zenith_env_builder.init_start()
 
     env.zenith_cli.create_branch('test_timeline_status')
@@ -698,7 +696,6 @@ def test_safekeeper_without_pageserver(test_output_dir: str,
         repo_dir,
         port_distributor,
         pg_bin,
-        num_safekeepers=1,
     )
 
     with env:

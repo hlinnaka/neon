@@ -103,7 +103,6 @@ def load(pg: Postgres, stop_event: threading.Event, load_ok_event: threading.Eve
 def test_tenant_relocation(zenith_env_builder: ZenithEnvBuilder,
                            port_distributor: PortDistributor,
                            with_load: str):
-    zenith_env_builder.num_safekeepers = 1
     zenith_env_builder.enable_local_fs_remote_storage()
 
     env = zenith_env_builder.init_start()
