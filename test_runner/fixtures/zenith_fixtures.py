@@ -412,7 +412,7 @@ class ZenithEnvBuilder:
                  port_distributor: PortDistributor,
                  pageserver_remote_storage: Optional[RemoteStorage] = None,
                  pageserver_config_override: Optional[str] = None,
-                 num_safekeepers: int = 0,
+                 num_safekeepers: int = 1,
                  pageserver_auth_enabled: bool = False,
                  rust_log_override: Optional[str] = None,
                  default_branch_name=DEFAULT_BRANCH_NAME,
@@ -1911,7 +1911,13 @@ def test_output_dir(request: Any) -> str:
     return test_dir
 
 
-SKIP_DIRS = frozenset(('pg_wal', 'pg_stat', 'pg_stat_tmp', 'pg_subtrans', 'pg_logical'))
+SKIP_DIRS = frozenset(('pg_wal',
+                       'pg_stat',
+                       'pg_stat_tmp',
+                       'pg_subtrans',
+                       'pg_logical',
+                       'pg_replslot/wal_proposer_slot',
+                       'pg_xact'))
 
 SKIP_FILES = frozenset(('pg_internal.init',
                         'pg.log',
