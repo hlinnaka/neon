@@ -186,6 +186,10 @@ fn main() -> anyhow::Result<()> {
     if let Some(prefix) = arg_matches.value_of("broker-etcd-prefix") {
         conf.broker_etcd_prefix = prefix.to_string();
     }
+    ensure!(
+        !conf.broker_endpoints.is_empty(),
+        "No broker endpoints provided"
+    );
 
     // Seems like there is no better way to accept bool values explicitly in clap.
     conf.s3_offload_enabled = arg_matches
