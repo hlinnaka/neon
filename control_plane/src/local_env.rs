@@ -60,14 +60,7 @@ pub struct LocalEnv {
     #[serde(default)]
     pub private_key_path: PathBuf,
 
-    // Broker (etcd) endpoints for storage nodes coordination, e.g. 'http://127.0.0.1:2379'.
-    #[serde(default)]
-    #[serde_as(as = "Vec<DisplayFromStr>")]
-    pub broker_endpoints: Vec<Url>,
-
-    /// A prefix to all to any key when pushing/polling etcd from a node.
-    #[serde(default)]
-    pub broker_etcd_prefix: Option<String>,
+    pub etcd_broker: EtcdBroker,
 
     pub pageserver: PageServerConf,
 
@@ -81,6 +74,48 @@ pub struct LocalEnv {
     // https://toml.io/en/v1.0.0 does not contain a concept of "a table inside another table".
     #[serde_as(as = "HashMap<_, Vec<(DisplayFromStr, DisplayFromStr)>>")]
     branch_name_mappings: HashMap<String, Vec<(ZTenantId, ZTimelineId)>>,
+}
+
+/// Etcd broker config for cluster internal communication.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct EtcdBroker {
+    /// A prefix to all to any key when pushing/polling etcd from a node.
+    #[serde(default)]
+    pub broker_etcd_prefix: Option<String>,
+
+    /// Broker (etcd) endpoints for storage nodes coordination, e.g. 'http://127.0.0.1:2379'.
+    #[serde(default)]
+    #[serde_as(as = "Vec<DisplayFromStr>")]
+    pub broker_endpoints: Vec<Url>,
+
+    /// Etcd binary path to use.
+    #[serde(default)]
+    pub etcd_binary_path: PathBuf,
+}
+
+impl EtcdBroker {
+    pub fn locate_etcd() -> anyhow::Result<PathBuf> {
+        let which_output = Command::new("which")
+            .arg("etcd")
+            .output()
+            .context("Failed to run 'which etcd' command")?;
+        let stdout = String::from_utf8_lossy(&which_output.stdout);
+        ensure!(
+            which_output.status.success(),
+            "'which etcd' invocation failed. Status: {}, stdout: {stdout}, stderr: {}",
+            which_output.status,
+            String::from_utf8_lossy(&which_output.stderr)
+        );
+
+        let etcd_path = PathBuf::from(stdout.trim());
+        ensure!(
+            etcd_path.is_file(),
+            "'which etcd' invocation was successful, but the path it returned is not a file or does not exist: {}",
+            etcd_path.display()
+        );
+
+        Ok(etcd_path)
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -97,7 +132,6 @@ pub struct PageServerConf {
 
     // jwt auth token used for communication with pageserver
     pub auth_token: String,
-    pub broker_endpoints: Vec<String>,
 }
 
 impl Default for PageServerConf {
@@ -108,7 +142,6 @@ impl Default for PageServerConf {
             listen_http_addr: String::new(),
             auth_type: AuthType::Trust,
             auth_token: String::new(),
-            broker_endpoints: Vec::new(),
         }
     }
 }
@@ -237,20 +270,25 @@ impl LocalEnv {
                 env.pg_distrib_dir = cwd.join("tmp_install")
             }
         }
+        if !env.pg_distrib_dir.join("bin/postgres").exists() {
+            bail!(
+                "Can't find postgres binary at {}",
+                env.pg_distrib_dir.display()
+            );
+        }
 
         // Find zenith binaries.
         if env.zenith_distrib_dir == Path::new("") {
-            let current_exec_path =
-                env::current_exe().context("Failed to find current excecutable's path")?;
-            env.zenith_distrib_dir = current_exec_path
-                .parent()
-                .with_context(|| {
-                    format!(
-                        "Failed to find a parent directory for executable {}",
-                        current_exec_path.display(),
-                    )
-                })?
-                .to_owned();
+            env.zenith_distrib_dir = env::current_exe()?.parent().unwrap().to_owned();
+        }
+        for binary in ["pageserver", "safekeeper"] {
+            if !env.zenith_distrib_dir.join(binary).exists() {
+                bail!(
+                    "Can't find binary '{}' in zenith distrib dir '{}'",
+                    binary,
+                    env.zenith_distrib_dir.display()
+                );
+            }
         }
 
         // If no initial tenant ID was given, generate it.
@@ -403,7 +441,6 @@ impl LocalEnv {
 
         self.pageserver.auth_token =
             self.generate_auth_token(&Claims::new(None, Scope::PageServerApi))?;
-        self.pageserver.broker_endpoints = self.broker_endpoints.clone();
 
         fs::create_dir_all(self.pg_data_dirs_path())?;
 
