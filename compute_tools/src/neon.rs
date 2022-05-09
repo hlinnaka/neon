@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::pg_helpers::*;
 
-/// Compute node state shared across several `zenith_ctl` threads.
+/// Compute node state shared across several `compute_ctl` threads.
 /// Should be used under `RwLock` to allow HTTP API server to serve
 /// status requests, while configuration is in progress.
 pub struct ComputeState {

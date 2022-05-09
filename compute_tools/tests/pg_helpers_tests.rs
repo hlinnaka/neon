@@ -3,8 +3,8 @@ mod pg_helpers_tests {
 
     use std::fs::File;
 
+    use compute_tools::neon::ClusterSpec;
     use compute_tools::pg_helpers::*;
-    use compute_tools::zenith::ClusterSpec;
 
     #[test]
     fn params_serialize() {

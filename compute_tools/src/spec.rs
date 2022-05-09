@@ -5,9 +5,9 @@ use log::{info, log_enabled, warn, Level};
 use postgres::Client;
 
 use crate::config;
+use crate::neon::ClusterSpec;
 use crate::params::PG_HBA_ALL_MD5;
 use crate::pg_helpers::*;
-use crate::zenith::ClusterSpec;
 
 /// It takes cluster specification and does the following:
 /// - Serialize cluster config and put it into `postgresql.conf` completely rewriting the file.

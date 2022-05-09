@@ -1,8 +1,8 @@
 //!
-//! Postgres wrapper (`zenith_ctl`) is intended to be run as a Docker entrypoint or as a `systemd`
-//! `ExecStart` option. It will handle all the `zenith` specifics during compute node
+//! Postgres wrapper (`compute_ctl`) is intended to be run as a Docker entrypoint or as a `systemd`
+//! `ExecStart` option. It will handle all the `Neon` specifics during compute node
 //! initialization:
-//! - `zenith_ctl` accepts cluster (compute node) specification as a JSON file.
+//! - `compute_ctl` accepts cluster (compute node) specification as a JSON file.
 //! - Every start is a fresh start, so the data directory is removed and
 //!   initialized again on each run.
 //! - Next it will put configuration files into the `PGDATA` directory.
@@ -12,7 +12,7 @@
 //! - Check and alter/drop/create roles and databases.
 //! - Hang waiting on the `postmaster` process to exit.
 //!
-//! Also `zenith_ctl` spawns two separate service threads:
+//! Also `compute_ctl` spawns two separate service threads:
 //! - `compute-monitor` checks the last Postgres activity timestamp and saves it
 //!   into the shared `ComputeState`;
 //! - `http-endpoint` runs a Hyper HTTP API server, which serves readiness and the
@@ -20,10 +20,10 @@
 //!
 //! Usage example:
 //! ```sh
-//! zenith_ctl -D /var/db/postgres/compute \
-//!            -C 'postgresql://zenith_admin@localhost/postgres' \
-//!            -S /var/db/postgres/specs/current.json \
-//!            -b /usr/local/bin/postgres
+//! compute_ctl -D /var/db/postgres/compute \
+//!             -C 'postgresql://zenith_admin@localhost/postgres' \
+//!             -S /var/db/postgres/specs/current.json \
+//!             -b /usr/local/bin/postgres
 //! ```
 //!
 use std::fs::File;
@@ -43,10 +43,10 @@ use compute_tools::config;
 use compute_tools::http_api::launch_http_server;
 use compute_tools::logger::*;
 use compute_tools::monitor::launch_monitor;
+use compute_tools::neon::*;
 use compute_tools::params::*;
 use compute_tools::pg_helpers::*;
 use compute_tools::spec::*;
-use compute_tools::zenith::*;
 
 /// Do all the preparations like PGDATA directory creation, configuration,
 /// safekeepers sync, basebackup, etc.
@@ -163,7 +163,7 @@ fn main() -> Result<()> {
 
     // Env variable is set by `cargo`
     let version: Option<&str> = option_env!("CARGO_PKG_VERSION");
-    let matches = clap::App::new("zenith_ctl")
+    let matches = clap::App::new("compute_ctl")
         .version(version.unwrap_or("unknown"))
         .arg(
             Arg::new("connstr")

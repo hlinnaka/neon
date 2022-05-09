@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use log::{debug, info};
 use postgres::{Client, NoTls};
 
-use crate::zenith::ComputeState;
+use crate::neon::ComputeState;
 
 const MONITOR_CHECK_INTERVAL: u64 = 500; // milliseconds
 

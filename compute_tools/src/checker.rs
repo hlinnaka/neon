@@ -5,7 +5,7 @@ use log::error;
 use postgres::Client;
 use tokio_postgres::NoTls;
 
-use crate::zenith::ComputeState;
+use crate::neon::ComputeState;
 
 pub fn create_writablity_check_data(client: &mut Client) -> Result<()> {
     let query = "
