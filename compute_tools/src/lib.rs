@@ -7,8 +7,8 @@ pub mod config;
 pub mod http_api;
 #[macro_use]
 pub mod logger;
+pub mod compute;
 pub mod monitor;
-pub mod neon;
 pub mod params;
 pub mod pg_helpers;
 pub mod spec;

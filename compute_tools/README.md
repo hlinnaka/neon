@@ -15,7 +15,7 @@ initialization:
 
 Also `compute_ctl` spawns two separate service threads:
 - `compute-monitor` checks the last Postgres activity timestamp and saves it
-  into the shared `ComputeState`;
+  into the shared `ComputeNode`;
 - `http-endpoint` runs a Hyper HTTP API server, which serves readiness and the
   last activity requests.
 

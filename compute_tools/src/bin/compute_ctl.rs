@@ -14,7 +14,7 @@
 //!
 //! Also `compute_ctl` spawns two separate service threads:
 //! - `compute-monitor` checks the last Postgres activity timestamp and saves it
-//!   into the shared `ComputeState`;
+//!   into the shared `ComputeNode`;
 //! - `http-endpoint` runs a Hyper HTTP API server, which serves readiness and the
 //!   last activity requests.
 //!
@@ -29,133 +29,21 @@
 use std::fs::File;
 use std::panic;
 use std::path::Path;
-use std::process::{exit, Command, ExitStatus};
+use std::process::exit;
 use std::sync::{Arc, RwLock};
+use std::{thread, time::Duration};
 
-use anyhow::{Context, Result};
-use chrono::Utc;
+use anyhow::Result;
 use clap::Arg;
-use log::info;
-use postgres::{Client, NoTls};
+use log::{error, info};
 
-use compute_tools::checker::create_writablity_check_data;
-use compute_tools::config;
+use compute_tools::compute::{ComputeMetrics, ComputeNode, ComputeState, ComputeStatus};
 use compute_tools::http_api::launch_http_server;
 use compute_tools::logger::*;
 use compute_tools::monitor::launch_monitor;
-use compute_tools::neon::*;
 use compute_tools::params::*;
 use compute_tools::pg_helpers::*;
 use compute_tools::spec::*;
-
-/// Do all the preparations like PGDATA directory creation, configuration,
-/// safekeepers sync, basebackup, etc.
-fn prepare_pgdata(state: &Arc<RwLock<ComputeState>>) -> Result<()> {
-    let state = state.read().unwrap();
-    let spec = &state.spec;
-    let pgdata_path = Path::new(&state.pgdata);
-    let pageserver_connstr = spec
-        .cluster
-        .settings
-        .find("zenith.page_server_connstring")
-        .expect("pageserver connstr should be provided");
-    let tenant = spec
-        .cluster
-        .settings
-        .find("zenith.zenith_tenant")
-        .expect("tenant id should be provided");
-    let timeline = spec
-        .cluster
-        .settings
-        .find("zenith.zenith_timeline")
-        .expect("tenant id should be provided");
-
-    info!(
-        "starting cluster #{}, operation #{}",
-        spec.cluster.cluster_id,
-        spec.operation_uuid.as_ref().unwrap()
-    );
-
-    // Remove/create an empty pgdata directory and put configuration there.
-    create_pgdata(&state.pgdata)?;
-    config::write_postgres_conf(&pgdata_path.join("postgresql.conf"), spec)?;
-
-    info!("starting safekeepers syncing");
-    let lsn = sync_safekeepers(&state.pgdata, &state.pgbin)
-        .with_context(|| "failed to sync safekeepers")?;
-    info!("safekeepers synced at LSN {}", lsn);
-
-    info!(
-        "getting basebackup@{} from pageserver {}",
-        lsn, pageserver_connstr
-    );
-    get_basebackup(&state.pgdata, &pageserver_connstr, &tenant, &timeline, &lsn).with_context(
-        || {
-            format!(
-                "failed to get basebackup@{} from pageserver {}",
-                lsn, pageserver_connstr
-            )
-        },
-    )?;
-
-    // Update pg_hba.conf received with basebackup.
-    update_pg_hba(pgdata_path)?;
-
-    Ok(())
-}
-
-/// Start Postgres as a child process and manage DBs/roles.
-/// After that this will hang waiting on the postmaster process to exit.
-fn run_compute(state: &Arc<RwLock<ComputeState>>) -> Result<ExitStatus> {
-    let read_state = state.read().unwrap();
-    let pgdata_path = Path::new(&read_state.pgdata);
-
-    // Run postgres as a child process.
-    let mut pg = Command::new(&read_state.pgbin)
-        .args(&["-D", &read_state.pgdata])
-        .spawn()
-        .expect("cannot start postgres process");
-
-    // Try default Postgres port if it is not provided
-    let port = read_state
-        .spec
-        .cluster
-        .settings
-        .find("port")
-        .unwrap_or_else(|| "5432".to_string());
-    wait_for_postgres(&port, pgdata_path)?;
-
-    let mut client = Client::connect(&read_state.connstr, NoTls)?;
-
-    handle_roles(&read_state.spec, &mut client)?;
-    handle_databases(&read_state.spec, &mut client)?;
-    handle_grants(&read_state.spec, &mut client)?;
-    create_writablity_check_data(&mut client)?;
-
-    // 'Close' connection
-    drop(client);
-
-    info!(
-        "finished configuration of cluster #{}",
-        read_state.spec.cluster.cluster_id
-    );
-
-    // Release the read lock.
-    drop(read_state);
-
-    // Get the write lock, update state and release the lock, so HTTP API
-    // was able to serve requests, while we are blocked waiting on
-    // Postgres.
-    let mut state = state.write().unwrap();
-    state.ready = true;
-    drop(state);
-
-    // Wait for child postgres process basically forever. In this state Ctrl+C
-    // will be propagated to postgres and it will be shut down as well.
-    let ecode = pg.wait().expect("failed to wait on postgres");
-
-    Ok(ecode)
-}
 
 fn main() -> Result<()> {
     // TODO: re-use `utils::logging` later
@@ -209,7 +97,7 @@ fn main() -> Result<()> {
     // Try to use just 'postgres' if no path is provided
     let pgbin = matches.value_of("pgbin").unwrap_or("postgres");
 
-    let spec: ClusterSpec = match spec {
+    let spec: ComputeSpec = match spec {
         // First, try to get cluster spec from the cli argument
         Some(json) => serde_json::from_str(json)?,
         None => {
@@ -224,29 +112,61 @@ fn main() -> Result<()> {
         }
     };
 
-    let compute_state = ComputeState {
+    let pageserver_connstr = spec
+        .cluster
+        .settings
+        .find("zenith.page_server_connstring")
+        .expect("pageserver connstr should be provided");
+    let tenant = spec
+        .cluster
+        .settings
+        .find("zenith.zenith_tenant")
+        .expect("tenant id should be provided");
+    let timeline = spec
+        .cluster
+        .settings
+        .find("zenith.zenith_timeline")
+        .expect("tenant id should be provided");
+
+    let compute_state = ComputeNode {
         connstr: connstr.to_string(),
         pgdata: pgdata.to_string(),
         pgbin: pgbin.to_string(),
         spec,
-        ready: false,
-        last_active: Utc::now(),
+        tenant,
+        timeline,
+        pageserver_connstr,
+        metrics: ComputeMetrics::new(),
+        state: RwLock::new(ComputeState::new()),
     };
-    let compute_state = Arc::new(RwLock::new(compute_state));
+    let compute = Arc::new(compute_state);
 
     // Launch service threads first, so we were able to serve availability
     // requests, while configuration is still in progress.
-    let mut _threads = vec![
-        launch_http_server(&compute_state).expect("cannot launch compute monitor thread"),
-        launch_monitor(&compute_state).expect("cannot launch http endpoint thread"),
-    ];
+    let _http_handle = launch_http_server(&compute).expect("cannot launch http endpoint thread");
+    let _monitor_handle = launch_monitor(&compute).expect("cannot launch compute monitor thread");
 
-    prepare_pgdata(&compute_state)?;
+    // Run compute (Postgres) and hang waiting on it.
+    match compute.prepare_and_run() {
+        Ok(ec) => {
+            let code = ec.code().unwrap_or(1);
+            info!("Postgres exited with code {}, shutting down", code);
+            exit(code)
+        }
+        Err(error) => {
+            error!("could not start the compute node: {}", error);
 
-    // Run compute (Postgres) and hang waiting on it. Panic if any error happens,
-    // it will help us to trigger unwind and kill postmaster as well.
-    match run_compute(&compute_state) {
-        Ok(ec) => exit(ec.success() as i32),
-        Err(error) => panic!("cannot start compute node, error: {}", error),
+            let mut state = compute.state.write().unwrap();
+            state.error = Some(format!("{:?}", error));
+            state.status = ComputeStatus::Failed;
+            drop(state);
+
+            // Keep serving HTTP requests, so the cloud control plane was able to
+            // get the actual error.
+            info!("giving control plane 30s to collect the error before shutdown");
+            thread::sleep(Duration::from_secs(30));
+            info!("shutting down");
+            Err(error)
+        }
     }
 }
