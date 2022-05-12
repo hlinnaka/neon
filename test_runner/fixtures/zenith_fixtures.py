@@ -1921,8 +1921,7 @@ SKIP_DIRS = frozenset(('pg_wal',
                        'pg_stat_tmp',
                        'pg_subtrans',
                        'pg_logical',
-                       'pg_replslot/wal_proposer_slot',
-                       'pg_xact'))
+                       'pg_replslot/wal_proposer_slot'))
 
 SKIP_FILES = frozenset(('pg_internal.init',
                         'pg.log',

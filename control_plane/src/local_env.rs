@@ -77,6 +77,7 @@ pub struct LocalEnv {
 }
 
 /// Etcd broker config for cluster internal communication.
+#[serde_as]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct EtcdBroker {
     /// A prefix to all to any key when pushing/polling etcd from a node.
@@ -115,6 +116,19 @@ impl EtcdBroker {
         );
 
         Ok(etcd_path)
+    }
+
+    pub fn comma_separated_endpoints(&self) -> String {
+        self.broker_endpoints.iter().map(Url::as_str).fold(
+            String::new(),
+            |mut comma_separated_urls, url| {
+                if !comma_separated_urls.is_empty() {
+                    comma_separated_urls.push(',');
+                }
+                comma_separated_urls.push_str(url);
+                comma_separated_urls
+            },
+        )
     }
 }
 
@@ -270,25 +284,10 @@ impl LocalEnv {
                 env.pg_distrib_dir = cwd.join("tmp_install")
             }
         }
-        if !env.pg_distrib_dir.join("bin/postgres").exists() {
-            bail!(
-                "Can't find postgres binary at {}",
-                env.pg_distrib_dir.display()
-            );
-        }
 
         // Find zenith binaries.
         if env.zenith_distrib_dir == Path::new("") {
             env.zenith_distrib_dir = env::current_exe()?.parent().unwrap().to_owned();
-        }
-        for binary in ["pageserver", "safekeeper"] {
-            if !env.zenith_distrib_dir.join(binary).exists() {
-                bail!(
-                    "Can't find binary '{}' in zenith distrib dir '{}'",
-                    binary,
-                    env.zenith_distrib_dir.display()
-                );
-            }
         }
 
         // If no initial tenant ID was given, generate it.
@@ -383,6 +382,22 @@ impl LocalEnv {
             "directory '{}' already exists. Perhaps already initialized?",
             base_path.display()
         );
+        if !self.pg_distrib_dir.join("bin/postgres").exists() {
+            bail!(
+                "Can't find postgres binary at {}",
+                self.pg_distrib_dir.display()
+            );
+        }
+        for binary in ["pageserver", "safekeeper"] {
+            if !self.zenith_distrib_dir.join(binary).exists() {
+                bail!(
+                    "Can't find binary '{}' in zenith distrib dir '{}'",
+                    binary,
+                    self.zenith_distrib_dir.display()
+                );
+            }
+        }
+
         for binary in ["pageserver", "safekeeper"] {
             if !self.zenith_distrib_dir.join(binary).exists() {
                 bail!(
@@ -472,26 +487,12 @@ mod tests {
             "failed to parse simple config {simple_conf_toml}, reason: {simple_conf_parse_result:?}"
         );
 
-        let regular_url_string = "broker_endpoints = ['localhost:1111']";
-        let regular_url_toml = simple_conf_toml.replace(
-            "[pageserver]",
-            &format!("\n{regular_url_string}\n[pageserver]"),
-        );
-        match LocalEnv::parse_config(&regular_url_toml) {
-            Ok(regular_url_parsed) => {
-                assert_eq!(
-                    regular_url_parsed.broker_endpoints,
-                    vec!["localhost:1111".parse().unwrap()],
-                    "Unexpectedly parsed broker endpoint url"
-                );
-            }
-            Err(e) => panic!("failed to parse simple config {regular_url_toml}, reason: {e}"),
-        }
-
-        let spoiled_url_string = "broker_endpoints = ['!@$XOXO%^&']";
-        let spoiled_url_toml = simple_conf_toml.replace(
-            "[pageserver]",
-            &format!("\n{spoiled_url_string}\n[pageserver]"),
+        let string_to_replace = "broker_endpoints = ['http://127.0.0.1:2379']";
+        let spoiled_url_str = "broker_endpoints = ['!@$XOXO%^&']";
+        let spoiled_url_toml = simple_conf_toml.replace(string_to_replace, spoiled_url_str);
+        assert!(
+            spoiled_url_toml.contains(spoiled_url_str),
+            "Failed to replace string {string_to_replace} in the toml file {simple_conf_toml}"
         );
         let spoiled_url_parse_result = LocalEnv::parse_config(&spoiled_url_toml);
         assert!(
