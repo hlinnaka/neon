@@ -211,7 +211,7 @@ impl Default for PageServerConfigBuilder {
             id: NotSet,
             profiling: Set(ProfilingConfig::Disabled),
             broker_etcd_prefix: Set(etcd_broker::DEFAULT_NEON_BROKER_ETCD_PREFIX.to_string()),
-            broker_endpoints: NotSet,
+            broker_endpoints: Set(Vec::new()),
         }
     }
 }
@@ -288,10 +288,6 @@ impl PageServerConfigBuilder {
         let broker_endpoints = self
             .broker_endpoints
             .ok_or(anyhow!("No broker endpoints provided"))?;
-        ensure!(
-            !broker_endpoints.is_empty(),
-            "Empty broker endpoints collection provided"
-        );
 
         Ok(PageServerConf {
             listen_pg_addr: self

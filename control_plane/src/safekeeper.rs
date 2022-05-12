@@ -12,7 +12,7 @@ use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use postgres::Config;
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::{IntoUrl, Method, Url};
+use reqwest::{IntoUrl, Method};
 use safekeeper::http::models::TimelineCreateRequest;
 use thiserror::Error;
 use utils::{
@@ -134,7 +134,7 @@ impl SafekeeperNode {
                 .args(&["--recall", "1 second"])
                 .args(&[
                     "--broker-endpoints",
-                    &self.env.etcd_broker.broker_endpoints.join(","),
+                    &self.env.etcd_broker.comma_separated_endpoints(),
                 ])
                 .arg("--daemonize"),
         );
@@ -142,20 +142,9 @@ impl SafekeeperNode {
             cmd.arg("--no-sync");
         }
 
-        if !self.broker_endpoints.is_empty() {
-            cmd.args(&[
-                "--broker-endpoints",
-                &self.broker_endpoints.iter().map(Url::as_str).fold(
-                    String::new(),
-                    |mut comma_separated_urls, url| {
-                        if !comma_separated_urls.is_empty() {
-                            comma_separated_urls.push(',');
-                        }
-                        comma_separated_urls.push_str(url);
-                        comma_separated_urls
-                    },
-                ),
-            ]);
+        let comma_separated_endpoints = self.env.etcd_broker.comma_separated_endpoints();
+        if !comma_separated_endpoints.is_empty() {
+            cmd.args(&["--broker-endpoints", &comma_separated_endpoints]);
         }
         if let Some(prefix) = self.env.etcd_broker.broker_etcd_prefix.as_deref() {
             cmd.args(&["--broker-etcd-prefix", prefix]);

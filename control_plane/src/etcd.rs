@@ -41,7 +41,7 @@ pub fn start_etcd_process(env: &local_env::LocalEnv) -> anyhow::Result<()> {
                 etcd_data_dir.display()
             )
         })?;
-    let client_urls = etcd_broker.broker_endpoints.join(",");
+    let client_urls = etcd_broker.comma_separated_endpoints();
 
     let etcd_process = Command::new(&etcd_broker.etcd_binary_path)
         .args(&[
